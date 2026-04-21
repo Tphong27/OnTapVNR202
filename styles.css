@@ -191,7 +191,7 @@ body {
 }
 
 .quiz-question-text {
-  font-size: 1.08rem;
+  font-size: 1.25rem;
   line-height: 1.45;
   color: var(--dark);
   margin: 8px 0 14px;
@@ -208,6 +208,8 @@ body {
   background: #fffdf8;
   border-radius: 8px;
   padding: 10px 12px;
+  font-size: 1.08rem;
+  line-height: 1.5;
   cursor: pointer;
   text-align: left;
   transition:
@@ -314,11 +316,11 @@ body {
 
 /* ── COVER ── */
 .cover {
-  background: #DA251D;
+  background: #da251d;
   background: radial-gradient(
     ellipse at center,
     #e52d27 0%,
-    #DA251D 40%,
+    #da251d 40%,
     #b71c1c 75%,
     #8b1a1a 100%
   );
@@ -333,7 +335,7 @@ body {
   content: "★";
   position: absolute;
   font-size: 520px;
-  color: #FFD700;
+  color: #ffd700;
   opacity: 0.18;
   top: 50%;
   left: 50%;
@@ -357,7 +359,7 @@ body {
   font-size: 0.85rem;
   letter-spacing: 0.35em;
   text-transform: uppercase;
-  color: #FFD700;
+  color: #ffd700;
   margin-bottom: 18px;
   font-weight: 600;
   text-shadow: 0 1px 4px rgba(0, 0, 0, 0.4);
@@ -370,7 +372,9 @@ body {
   letter-spacing: 0.01em;
   margin-bottom: 12px;
   color: #fff;
-  text-shadow: 0 2px 8px rgba(0, 0, 0, 0.45), 0 0 30px rgba(0, 0, 0, 0.15);
+  text-shadow:
+    0 2px 8px rgba(0, 0, 0, 0.45),
+    0 0 30px rgba(0, 0, 0, 0.15);
 }
 .cover .subtitle {
   font-size: 1.05rem;
@@ -388,7 +392,7 @@ body {
   font-size: 0.8rem;
   letter-spacing: 0.12em;
   text-transform: uppercase;
-  color: #FFD700;
+  color: #ffd700;
   font-weight: 600;
   text-shadow: 0 1px 3px rgba(0, 0, 0, 0.4);
 }
