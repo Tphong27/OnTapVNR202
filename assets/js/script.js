@@ -135,6 +135,13 @@ const quizElements = {
   score: document.getElementById("quiz-score"),
 };
 
+const questionBankElements = {
+  searchInput: document.getElementById("question-bank-search"),
+  count: document.getElementById("question-bank-count"),
+  list: document.getElementById("question-bank-list"),
+  empty: document.getElementById("question-bank-empty"),
+};
+
 function parseQuestionBank(rawText) {
   const lines = rawText.replace(/\r/g, "").split("\n");
   const questions = [];
@@ -215,6 +222,29 @@ function shuffleArray(input) {
   return clone;
 }
 
+function normalizeSearchText(value) {
+  return String(value || "")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .trim();
+}
+
+function getQuestionSearchText(question) {
+  const optionsText = Object.entries(question.options)
+    .map(([key, text]) => `${key} ${text}`)
+    .join(" ");
+
+  return normalizeSearchText(
+    `${question.number} ${question.question} ${question.answer} ${optionsText}`,
+  );
+}
+
+function getCorrectAnswerLabel(question) {
+  const answerText = question.options[question.answer];
+  return answerText ? `${question.answer}. ${answerText}` : `${question.answer}.`;
+}
+
 function getSelectedMode() {
   const selected = document.querySelector('input[name="quiz-mode"]:checked');
   return selected ? selected.value : "random25";
@@ -232,7 +262,7 @@ function updateProgress() {
   const answeredCount = quizState.answers.filter(Boolean).length;
 
   quizElements.progress.textContent =
-    `Cau ${current}/${total} - Da tra loi ${answeredCount}/${total}`;
+    `Câu ${current}/${total} - Đã trả lời ${answeredCount}/${total}`;
 }
 
 function updateFeedback() {
@@ -247,19 +277,19 @@ function updateFeedback() {
 
   if (!revealed) {
     quizElements.answerFeedback.textContent =
-      "Chon dap an de xem ket qua ngay tren cau hien tai.";
+      "Chọn đáp án để xem kết quả ngay trên câu hiện tại.";
     return;
   }
 
   if (!selected) {
-    quizElements.answerFeedback.textContent = `Dap an dung la ${question.answer}.`;
+    quizElements.answerFeedback.textContent = `Đáp án đúng là ${question.answer}.`;
     return;
   }
 
   quizElements.answerFeedback.textContent =
     selected === question.answer
-      ? `Chinh xac. Dap an dung la ${question.answer}.`
-      : `Chua dung. Ban chon ${selected}, dap an dung la ${question.answer}.`;
+      ? `Chính xác. Đáp án đúng là ${question.answer}.`
+      : `Chưa đúng. Bạn chọn ${selected}, đáp án đúng là ${question.answer}.`;
 }
 
 function renderOptions(question) {
@@ -306,7 +336,7 @@ function renderCurrentQuestion() {
   const question = quizState.activeQuestions[quizState.currentIndex];
   if (!question) return;
 
-  quizElements.questionId.textContent = `Cau goc #${question.number}`;
+  quizElements.questionId.textContent = `Câu gốc #${question.number}`;
   quizElements.questionText.textContent = question.question;
 
   renderOptions(question);
@@ -320,7 +350,7 @@ function startQuiz() {
   const allQuestions = [...quizState.allQuestions];
 
   if (!allQuestions.length) {
-    quizElements.loadStatus.textContent = "Khong co du lieu cau hoi de bat dau.";
+    quizElements.loadStatus.textContent = "Không có dữ liệu câu hỏi để bắt đầu.";
     return;
   }
 
@@ -355,7 +385,104 @@ function submitQuiz() {
   });
 
   quizElements.score.textContent =
-    `Ket qua: dung ${correct}/${total} cau - da tra loi ${answered}/${total} cau.`;
+    `Kết quả: đúng ${correct}/${total} câu - đã trả lời ${answered}/${total} câu.`;
+}
+
+function renderQuestionBank(questions) {
+  if (
+    !questionBankElements.list ||
+    !questionBankElements.empty ||
+    !questionBankElements.count
+  ) {
+    return;
+  }
+
+  questionBankElements.list.innerHTML = "";
+  questionBankElements.empty.hidden = questions.length > 0;
+  questionBankElements.count.textContent =
+    `Hiển thị ${questions.length}/${quizState.allQuestions.length} câu`;
+
+  if (!questions.length) {
+    return;
+  }
+
+  const fragment = document.createDocumentFragment();
+
+  questions.forEach((question) => {
+    const card = document.createElement("article");
+    card.className = "question-bank-card";
+
+    const meta = document.createElement("div");
+    meta.className = "question-bank-card__meta";
+
+    const id = document.createElement("p");
+    id.className = "question-bank-card__id";
+    id.textContent = `Câu #${question.number}`;
+
+    const answer = document.createElement("p");
+    answer.className = "question-bank-card__answer";
+    answer.textContent = `Đáp án đúng: ${getCorrectAnswerLabel(question)}`;
+
+    meta.append(id, answer);
+
+    const title = document.createElement("h4");
+    title.className = "question-bank-card__question";
+    title.textContent = question.question;
+
+    const options = document.createElement("div");
+    options.className = "question-bank-options";
+
+    ["A", "B", "C", "D"].forEach((key) => {
+      if (!question.options[key]) return;
+
+      const option = document.createElement("div");
+      option.className = "question-bank-option";
+
+      if (key === question.answer) {
+        option.classList.add("correct");
+      }
+
+      const label = document.createElement("strong");
+      label.textContent = `${key}. `;
+      option.appendChild(label);
+      option.append(question.options[key]);
+      options.appendChild(option);
+    });
+
+    card.append(meta, title, options);
+    fragment.appendChild(card);
+  });
+
+  questionBankElements.list.appendChild(fragment);
+}
+
+function filterQuestionBank() {
+  const keyword = normalizeSearchText(questionBankElements.searchInput?.value);
+
+  if (!keyword) {
+    renderQuestionBank(quizState.allQuestions);
+    return;
+  }
+
+  const filteredQuestions = quizState.allQuestions.filter((question) =>
+    getQuestionSearchText(question).includes(keyword),
+  );
+
+  renderQuestionBank(filteredQuestions);
+}
+
+function initQuestionBank() {
+  if (
+    !questionBankElements.searchInput ||
+    !questionBankElements.count ||
+    !questionBankElements.list ||
+    !questionBankElements.empty
+  ) {
+    return;
+  }
+
+  renderQuestionBank(quizState.allQuestions);
+  questionBankElements.searchInput.addEventListener("input", filterQuestionBank);
 }
 
 function initQuiz() {
@@ -372,13 +499,21 @@ function initQuiz() {
 
   if (!quizState.allQuestions.length) {
     quizElements.loadStatus.textContent =
-      "Khong doc duoc bo cau hoi tu pt.txt. Vui long kiem tra file du lieu.";
+      "Không đọc được bộ câu hỏi từ pt.txt. Vui lòng kiểm tra file dữ liệu.";
     quizElements.startBtn.disabled = true;
+    if (questionBankElements.count) {
+      questionBankElements.count.textContent = "Không tải được dữ liệu câu hỏi.";
+    }
+    if (questionBankElements.empty) {
+      questionBankElements.empty.hidden = false;
+      questionBankElements.empty.textContent =
+        "Không đọc được bộ câu hỏi hiện tại.";
+    }
     return;
   }
 
   quizElements.loadStatus.textContent =
-    `Da nap ${quizState.allQuestions.length} cau hoi.`;
+    `Đã nạp ${quizState.allQuestions.length} câu hỏi.`;
 
   const legacyCheckButton = document.getElementById("quiz-check-btn");
   if (legacyCheckButton) {
@@ -389,14 +524,15 @@ function initQuiz() {
   quizElements.prevBtn.addEventListener("click", () => moveQuestion(-1));
   quizElements.nextBtn.addEventListener("click", () => moveQuestion(1));
   quizElements.submitBtn.addEventListener("click", submitQuiz);
+  initQuestionBank();
 }
 
 function getTocGroupLabel(id) {
-  if (id === "#nhap-mon") return "Chuong nhap mon";
-  if (id.startsWith("#c1-")) return "Chuong 1";
-  if (id.startsWith("#c2-")) return "Chuong 2";
-  if (id.startsWith("#c3-")) return "Chuong 3";
-  return "Muc khac";
+  if (id === "#nhap-mon") return "Chương nhập môn";
+  if (id.startsWith("#c1-")) return "Chương 1";
+  if (id.startsWith("#c2-")) return "Chương 2";
+  if (id.startsWith("#c3-")) return "Chương 3";
+  return "Mục khác";
 }
 
 function initStudyToc() {
@@ -435,7 +571,7 @@ function initStudyToc() {
     return;
   }
 
-  const groupOrder = ["Chuong nhap mon", "Chuong 1", "Chuong 2", "Chuong 3"];
+  const groupOrder = ["Chương nhập môn", "Chương 1", "Chương 2", "Chương 3"];
   const groupedEntries = groupOrder
     .map((group) => ({
       group,
@@ -549,7 +685,7 @@ function initStudyToc() {
     toggleButton.setAttribute("aria-expanded", "false");
     toggleButton.innerHTML =
       `<span class="sidebar-toc-group__title">${group}</span>` +
-      `<span class="sidebar-toc-group__count">${entries.length} muc</span>`;
+      `<span class="sidebar-toc-group__count">${entries.length} mục</span>`;
 
     const linksWrap = document.createElement("div");
     linksWrap.className = "sidebar-toc-group__links";

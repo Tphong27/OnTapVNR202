@@ -11,7 +11,7 @@
       <button
         class="mobile-menu-toggle"
         type="button"
-        aria-label="Mo menu chuc nang"
+        aria-label="Mở menu chức năng"
         aria-controls="app-sidebar"
         aria-expanded="false"
       >
@@ -35,7 +35,7 @@
             <h2>VNR202</h2>
             <p>Chọn chức năng học tập</p>
           </div>
-          <button class="sidebar-close" type="button" aria-label="Dong menu">
+          <button class="sidebar-close" type="button" aria-label="Đóng menu">
             &times;
           </button>
         </div>
@@ -52,6 +52,13 @@
           </button>
           <button
             class="feature-link"
+            data-target="panel-question-bank"
+            type="button"
+          >
+            Ngân hàng câu hỏi
+          </button>
+          <button
+            class="feature-link"
             data-target="panel-flash-card"
             type="button"
           >
@@ -65,7 +72,7 @@
             Ghi chú
           </button>
         </nav>
-        <section class="sidebar-study-nav" aria-label="Muc luc nhanh tren mobile">
+        <section class="sidebar-study-nav" aria-label="Mục lục nhanh trên mobile">
           <div class="sidebar-study-nav__head">
             <p class="sidebar-study-nav__eyebrow">Bài giảng</p>
             <h3>Mục lục nhanh</h3>
@@ -2141,6 +2148,44 @@
 
               <p id="quiz-score" class="quiz-score"></p>
             </div>
+          </div>
+        </section>
+
+        <section class="feature-panel" id="panel-question-bank">
+          <div class="question-bank-wrap">
+            <div class="question-bank-head">
+              <div>
+                <h3>Ngân hàng câu hỏi</h3>
+                <p class="question-bank-subtitle">
+                  Xem toàn bộ câu hỏi hiện có, đáp án đúng và tìm nhanh theo số
+                  câu hoặc nội dung.
+                </p>
+              </div>
+              <p id="question-bank-count" class="question-bank-count">
+                Đang chuẩn bị dữ liệu...
+              </p>
+            </div>
+
+            <label class="question-bank-search-wrap" for="question-bank-search">
+              <span>Tìm câu hỏi</span>
+              <input
+                id="question-bank-search"
+                class="question-bank-search"
+                type="search"
+                placeholder="Nhập số câu hoặc từ khóa..."
+                autocomplete="off"
+              />
+            </label>
+
+            <div
+              id="question-bank-empty"
+              class="question-bank-empty"
+              hidden
+            >
+              Không tìm thấy câu hỏi phù hợp.
+            </div>
+
+            <div id="question-bank-list" class="question-bank-list"></div>
           </div>
         </section>
 
