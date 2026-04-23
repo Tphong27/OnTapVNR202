@@ -897,7 +897,7 @@ A
 A. Làm cho xã hội Việt Nam khủng hoảng chính trị trầm trọng
 B. Làm cho cách mạng Việt Nam khủng hoảng đường lối trầm trọng
 C. Làm cho xã hội Việt Nam phân hóa giai cấp sâu sắc
-D
+C
 
 130. Nhiệm vụ cách mạng được nêu trong Cương lĩnh chính trị đầu tiên tháng 2 /1930 của Đảng là gì?
 A. Thực hiện nam - nữ bình quyền
