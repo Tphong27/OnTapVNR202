@@ -969,7 +969,7 @@ C
 
 140. Mối quan hệ giữa hai khẩu hiệu: "Độc lập dân tộc" và "Ruộng đất cho dân cày" được giải quyết như thế nào trong thời kỳ 1939-1945?
 A. Tạm gác lại khẩu hiệu cách mạng ruộng đất
-B.
+B. Cả câu A và B đều đúng
 C. Tiếp tục thực hiện hai khẩu hiệu trên một cách đồng bộ
 D. Tạm gác lại khẩu hiệu cách mạng giải phóng dân tộc
 A
