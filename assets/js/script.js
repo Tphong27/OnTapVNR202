@@ -113,6 +113,7 @@ function initMobileSidebar() {
 }
 
 const quizState = {
+  datasets: {},
   allQuestions: [],
   activeQuestions: [],
   answers: [],
@@ -127,11 +128,12 @@ const quizElements = {
   progress: document.getElementById("quiz-progress"),
   questionId: document.getElementById("quiz-question-id"),
   questionText: document.getElementById("quiz-question-text"),
+  questionHint: document.getElementById("quiz-question-hint"),
   options: document.getElementById("quiz-options"),
   answerFeedback: document.getElementById("quiz-answer-feedback"),
   prevBtn: document.getElementById("quiz-prev-btn"),
   nextBtn: document.getElementById("quiz-next-btn"),
-  checkBtn: document.getElementById("quiz-check-btn"),
+  checkAnswerBtn: document.getElementById("quiz-check-btn"),
   submitBtn: document.getElementById("quiz-submit-btn"),
   score: document.getElementById("quiz-score"),
 };
@@ -146,18 +148,21 @@ const questionBankElements = {
 const QUIZ_OPTION_KEYS = ["A", "B", "C", "D", "E"];
 
 function parseAnswerKeys(value) {
-  const rawValue = String(value || "").toUpperCase().replace(/\.$/, "").trim();
-  const answerParts =
-    rawValue.includes(",")
-      ? rawValue.split(",")
-      : /^[A-E]+$/.test(rawValue)
-        ? rawValue.split("")
-        : [rawValue];
+  const rawValue = String(value || "")
+    .toUpperCase()
+    .replace(/\.$/, "")
+    .trim();
+  const answerParts = rawValue.includes(",")
+    ? rawValue.split(",")
+    : /^[A-E]+$/.test(rawValue)
+      ? rawValue.split("")
+      : [rawValue];
 
   return answerParts
     .map((item) => item.trim())
-    .filter((item, index, items) =>
-      /^[A-E]$/.test(item) && items.indexOf(item) === index,
+    .filter(
+      (item, index, items) =>
+        /^[A-E]$/.test(item) && items.indexOf(item) === index,
     );
 }
 
@@ -179,6 +184,10 @@ function getQuestionOptionKeys(question) {
   return QUIZ_OPTION_KEYS.filter((key) =>
     Object.prototype.hasOwnProperty.call(question.options, key),
   );
+}
+
+function isMultipleAnswerQuestion(question) {
+  return getQuestionAnswerKeys(question).length > 1;
 }
 
 function formatAnswerKeys(keys, options) {
@@ -223,7 +232,10 @@ function parseQuestionBank(rawText) {
         continue;
       }
 
-      if (/^[A-E](?:\.\s*|:\s*|\s+)/.test(current) || /^\*?\s*\d+\.\s+/.test(current)) {
+      if (
+        /^[A-E](?:\.\s*|:\s*|\s+)/.test(current) ||
+        /^\*?\s*\d+\.\s+/.test(current)
+      ) {
         break;
       }
 
@@ -276,6 +288,30 @@ function parseQuestionBank(rawText) {
   return questions.sort((a, b) => a.number - b.number);
 }
 
+function buildQuizDatasets(questions) {
+  return {
+    all: {
+      key: "all",
+      label: "Bộ tổng hợp",
+      questions,
+    },
+    quiz1: {
+      key: "quiz1",
+      label: "Quiz 1",
+      questions: questions.filter(
+        (question) => question.number >= 1 && question.number <= 99,
+      ),
+    },
+    quiz2: {
+      key: "quiz2",
+      label: "Quiz 2",
+      questions: questions.filter(
+        (question) => question.number >= 100 && question.number <= 177,
+      ),
+    },
+  };
+}
+
 function shuffleArray(input) {
   const clone = [...input];
 
@@ -314,58 +350,163 @@ function getSelectedMode() {
   return selected ? selected.value : "random25";
 }
 
+function updateQuestionHint(question) {
+  if (!quizElements.questionHint) return;
+
+  if (!question || !isMultipleAnswerQuestion(question)) {
+    quizElements.questionHint.hidden = true;
+    quizElements.questionHint.textContent = "";
+    return;
+  }
+
+  const answerCount = getQuestionAnswerKeys(question).length;
+  quizElements.questionHint.hidden = false;
+  quizElements.questionHint.textContent = `Chọn ${answerCount} đáp án`;
+}
+
+function resetQuizSession() {
+  quizState.activeQuestions = [];
+  quizState.answers = [];
+  quizState.revealed = [];
+  quizState.currentIndex = 0;
+
+  quizElements.playground.hidden = true;
+  quizElements.progress.textContent = "";
+  quizElements.questionId.textContent = "";
+  quizElements.questionText.textContent = "";
+  quizElements.options.innerHTML = "";
+  quizElements.answerFeedback.textContent = "";
+  quizElements.score.textContent = "";
+  updateQuestionHint(null);
+  updateCheckAnswerButton(null);
+}
+
+function updateLoadStatus() {
+  const total = quizState.datasets.all?.questions.length || 0;
+  const quiz1 = quizState.datasets.quiz1?.questions.length || 0;
+  const quiz2 = quizState.datasets.quiz2?.questions.length || 0;
+
+  quizElements.loadStatus.textContent =
+    `Đã nạp ${total} câu hỏi. Quiz 1 có ${quiz1} câu, Quiz 2 có ${quiz2} câu.`;
+}
+
+function getQuestionsForMode(mode) {
+  if (mode === "quiz1") {
+    return [...(quizState.datasets.quiz1?.questions || [])];
+  }
+
+  if (mode === "quiz2") {
+    return [...(quizState.datasets.quiz2?.questions || [])];
+  }
+
+  return [...(quizState.datasets.all?.questions || [])];
+}
+
+function isQuestionAnswered(question, index) {
+  if (!question) return false;
+
+  if (isMultipleAnswerQuestion(question)) {
+    return Boolean(quizState.revealed[index]);
+  }
+
+  return hasAnswerSelection(quizState.answers[index]);
+}
+
 function updateNavButtons() {
   const { currentIndex, activeQuestions } = quizState;
   quizElements.prevBtn.disabled = currentIndex === 0;
   quizElements.nextBtn.disabled = currentIndex >= activeQuestions.length - 1;
 }
 
-function updateCheckButton() {
-  if (!quizElements.checkBtn) return;
-
-  quizElements.checkBtn.disabled = quizState.revealed[quizState.currentIndex];
-}
-
 function updateProgress() {
   const total = quizState.activeQuestions.length;
-  const current = quizState.currentIndex + 1;
-  const answeredCount = quizState.answers.filter(hasAnswerSelection).length;
+  if (!total) {
+    quizElements.progress.textContent = "";
+    return;
+  }
 
-  quizElements.progress.textContent =
-    `Câu ${current}/${total} - Đã trả lời ${answeredCount}/${total}`;
+  const current = quizState.currentIndex + 1;
+  const answeredCount = quizState.activeQuestions.filter((question, index) =>
+    isQuestionAnswered(question, index),
+  ).length;
+
+  quizElements.progress.textContent = `Câu ${current}/${total} - Đã trả lời ${answeredCount}/${total}`;
 }
 
 function updateFeedback() {
   const question = quizState.activeQuestions[quizState.currentIndex];
-  const selectedKeys = getSelectedAnswerKeys(
-    quizState.answers[quizState.currentIndex],
-  );
-  const revealed = quizState.revealed[quizState.currentIndex];
-  const correctLabel = getCorrectAnswerLabel(question);
 
   if (!question) {
     quizElements.answerFeedback.textContent = "";
     return;
   }
 
+  const selectedKeys = getSelectedAnswerKeys(
+    quizState.answers[quizState.currentIndex],
+  );
+  const revealed = quizState.revealed[quizState.currentIndex];
+  const requiredAnswerCount = getQuestionAnswerKeys(question).length;
+  const correctLabel = getCorrectAnswerLabel(question);
+
   if (!revealed) {
-    quizElements.answerFeedback.textContent =
-      getQuestionAnswerKeys(question).length > 1
-        ? "Chọn một hoặc nhiều đáp án rồi bấm Xem đáp án."
-        : "Chọn đáp án rồi bấm Xem đáp án.";
+    if (isMultipleAnswerQuestion(question)) {
+      if (!selectedKeys.length) {
+        quizElements.answerFeedback.textContent =
+          'Chọn đủ đáp án rồi bấm "Nộp đáp án" để kiểm tra.';
+      } else if (selectedKeys.length < requiredAnswerCount) {
+        quizElements.answerFeedback.textContent = `Đã chọn ${selectedKeys.length}/${requiredAnswerCount} đáp án.`;
+      } else {
+        quizElements.answerFeedback.textContent =
+          'Đã chọn đủ đáp án. Bấm "Nộp đáp án" để kiểm tra.';
+      }
+    } else {
+      quizElements.answerFeedback.textContent =
+        "Chọn 1 đáp án, hệ thống sẽ chấm đúng/sai ngay.";
+    }
     return;
   }
 
   if (!selectedKeys.length) {
-    quizElements.answerFeedback.textContent = "Đáp án đúng là " + correctLabel + ".";
+    quizElements.answerFeedback.textContent =
+      "Đáp án đúng là " + correctLabel + ".";
     return;
   }
 
   const selectedLabel = formatAnswerKeys(selectedKeys, question.options);
-  quizElements.answerFeedback.textContent =
-    isSelectionCorrect(question, selectedKeys)
-      ? "Chính xác. Đáp án đúng là " + correctLabel + "."
-      : "Chưa đúng. Bạn chọn " + selectedLabel + ", đáp án đúng là " + correctLabel + ".";
+  quizElements.answerFeedback.textContent = isSelectionCorrect(
+    question,
+    selectedKeys,
+  )
+    ? "Chính xác. Đáp án đúng là " + correctLabel + "."
+    : "Chưa đúng. Bạn chọn " +
+      selectedLabel +
+      ". Đáp án đúng là " +
+      correctLabel +
+      ".";
+}
+
+function updateCheckAnswerButton(question) {
+  if (!quizElements.checkAnswerBtn) return;
+
+  if (!question || !isMultipleAnswerQuestion(question)) {
+    quizElements.checkAnswerBtn.hidden = true;
+    quizElements.checkAnswerBtn.disabled = true;
+    quizElements.checkAnswerBtn.textContent = "Nộp đáp án";
+    return;
+  }
+
+  const selectedKeys = getSelectedAnswerKeys(
+    quizState.answers[quizState.currentIndex],
+  );
+  const requiredAnswerCount = getQuestionAnswerKeys(question).length;
+  const revealed = quizState.revealed[quizState.currentIndex];
+
+  quizElements.checkAnswerBtn.hidden = false;
+  quizElements.checkAnswerBtn.disabled =
+    revealed || selectedKeys.length !== requiredAnswerCount;
+  quizElements.checkAnswerBtn.textContent = revealed
+    ? "Đã nộp đáp án"
+    : "Nộp đáp án";
 }
 
 function renderOptions(question) {
@@ -374,7 +515,7 @@ function renderOptions(question) {
   );
   const revealed = quizState.revealed[quizState.currentIndex];
   const answerKeys = getQuestionAnswerKeys(question);
-  const isMultipleAnswer = answerKeys.length > 1;
+  const isMultipleAnswer = isMultipleAnswerQuestion(question);
 
   quizElements.options.innerHTML = "";
 
@@ -387,7 +528,10 @@ function renderOptions(question) {
     optionButton.dataset.option = key;
     optionButton.textContent = key + ". " + optionText;
     optionButton.disabled = revealed;
-    optionButton.setAttribute("aria-pressed", String(selectedKeys.includes(key)));
+    optionButton.setAttribute(
+      "aria-pressed",
+      String(selectedKeys.includes(key)),
+    );
 
     if (selectedKeys.includes(key)) {
       optionButton.classList.add("selected");
@@ -404,15 +548,22 @@ function renderOptions(question) {
     optionButton.addEventListener("click", () => {
       if (quizState.revealed[quizState.currentIndex]) return;
 
-      if (isMultipleAnswer) {
-        const nextSelection = selectedKeys.includes(key)
-          ? selectedKeys.filter((item) => item !== key)
-          : [...selectedKeys, key].sort();
+      let nextSelection = [];
 
-        quizState.answers[quizState.currentIndex] = nextSelection;
+      if (isMultipleAnswer) {
+        if (selectedKeys.includes(key)) {
+          nextSelection = selectedKeys.filter((item) => item !== key);
+        } else {
+          if (selectedKeys.length >= answerKeys.length) return;
+          nextSelection = [...selectedKeys, key].sort();
+        }
       } else {
-        quizState.answers[quizState.currentIndex] = [key];
+        nextSelection = [key];
       }
+
+      quizState.answers[quizState.currentIndex] = nextSelection;
+      quizState.revealed[quizState.currentIndex] =
+        !isMultipleAnswer && hasAnswerSelection(nextSelection);
 
       renderCurrentQuestion();
     });
@@ -421,39 +572,37 @@ function renderOptions(question) {
   });
 }
 
-function revealCurrentQuestion() {
-  const question = quizState.activeQuestions[quizState.currentIndex];
-  if (!question) return;
-
-  quizState.revealed[quizState.currentIndex] = true;
-  renderCurrentQuestion();
-}
-
 function renderCurrentQuestion() {
   const question = quizState.activeQuestions[quizState.currentIndex];
   if (!question) return;
 
   quizElements.questionId.textContent = `Câu gốc #${question.number}`;
   quizElements.questionText.textContent = question.question;
-
+  updateQuestionHint(question);
   renderOptions(question);
   updateProgress();
   updateNavButtons();
-  updateCheckButton();
   updateFeedback();
+  updateCheckAnswerButton(question);
 }
 
 function startQuiz() {
   const mode = getSelectedMode();
-  const allQuestions = [...quizState.allQuestions];
+  const sourceQuestions = getQuestionsForMode(mode);
 
-  if (!allQuestions.length) {
-    quizElements.loadStatus.textContent = "Không có dữ liệu câu hỏi để bắt đầu.";
+  if (!sourceQuestions.length) {
+    quizElements.loadStatus.textContent =
+      "Không có dữ liệu câu hỏi để bắt đầu.";
     return;
   }
 
   quizState.activeQuestions =
-    mode === "random25" ? shuffleArray(allQuestions).slice(0, 25) : allQuestions;
+    mode === "random25"
+      ? shuffleArray(sourceQuestions).slice(
+          0,
+          Math.min(25, sourceQuestions.length),
+        )
+      : sourceQuestions;
   quizState.answers = new Array(quizState.activeQuestions.length).fill(null);
   quizState.revealed = new Array(quizState.activeQuestions.length).fill(false);
   quizState.currentIndex = 0;
@@ -471,19 +620,51 @@ function moveQuestion(step) {
   renderCurrentQuestion();
 }
 
+function submitCurrentAnswer() {
+  const question = quizState.activeQuestions[quizState.currentIndex];
+  if (!question || !isMultipleAnswerQuestion(question)) return;
+
+  const selectedKeys = getSelectedAnswerKeys(
+    quizState.answers[quizState.currentIndex],
+  );
+  const requiredAnswerCount = getQuestionAnswerKeys(question).length;
+
+  if (selectedKeys.length !== requiredAnswerCount) return;
+
+  quizState.revealed[quizState.currentIndex] = true;
+  renderCurrentQuestion();
+}
+
 function submitQuiz() {
   const total = quizState.activeQuestions.length;
-  const answered = quizState.answers.filter(hasAnswerSelection).length;
+  if (!total) return;
+
+  let answered = 0;
   let correct = 0;
 
   quizState.activeQuestions.forEach((question, index) => {
-    if (isSelectionCorrect(question, quizState.answers[index])) {
+    const selectedKeys = getSelectedAnswerKeys(quizState.answers[index]);
+    const requiredAnswerCount = getQuestionAnswerKeys(question).length;
+    const canEvaluate =
+      selectedKeys.length > 0 &&
+      (!isMultipleAnswerQuestion(question) ||
+        selectedKeys.length === requiredAnswerCount);
+
+    if (canEvaluate) {
+      quizState.revealed[index] = true;
+      answered += 1;
+    }
+
+    if (canEvaluate && isSelectionCorrect(question, selectedKeys)) {
       correct += 1;
     }
   });
 
-  quizElements.score.textContent =
-    `Kết quả: đúng ${correct}/${total} câu - đã trả lời ${answered}/${total} câu.`;
+  quizElements.score.textContent = `Kết quả: đúng ${correct}/${total} câu - đã trả lời ${answered}/${total} câu.`;
+
+  if (!quizElements.playground.hidden) {
+    renderCurrentQuestion();
+  }
 }
 
 function renderQuestionBank(questions) {
@@ -497,8 +678,7 @@ function renderQuestionBank(questions) {
 
   questionBankElements.list.innerHTML = "";
   questionBankElements.empty.hidden = questions.length > 0;
-  questionBankElements.count.textContent =
-    `Hiển thị ${questions.length}/${quizState.allQuestions.length} câu`;
+  questionBankElements.count.textContent = `Hiển thị ${questions.length}/${quizState.allQuestions.length} câu`;
 
   if (!questions.length) {
     return;
@@ -579,8 +759,10 @@ function initQuestionBank() {
     return;
   }
 
-  renderQuestionBank(quizState.allQuestions);
-  questionBankElements.searchInput.addEventListener("input", filterQuestionBank);
+  questionBankElements.searchInput.addEventListener(
+    "input",
+    filterQuestionBank,
+  );
 }
 
 function initQuiz() {
@@ -593,14 +775,15 @@ function initQuiz() {
   }
 
   const raw = typeof window.QUIZ_RAW === "string" ? window.QUIZ_RAW : "";
-  quizState.allQuestions = parseQuestionBank(raw);
+  const parsedQuestions = parseQuestionBank(raw);
 
-  if (!quizState.allQuestions.length) {
+  if (!parsedQuestions.length) {
     quizElements.loadStatus.textContent =
       "Không đọc được bộ câu hỏi từ quiz-data.js. Vui lòng kiểm tra file dữ liệu.";
     quizElements.startBtn.disabled = true;
     if (questionBankElements.count) {
-      questionBankElements.count.textContent = "Không tải được dữ liệu câu hỏi.";
+      questionBankElements.count.textContent =
+        "Không tải được dữ liệu câu hỏi.";
     }
     if (questionBankElements.empty) {
       questionBankElements.empty.hidden = false;
@@ -610,22 +793,19 @@ function initQuiz() {
     return;
   }
 
-  quizElements.loadStatus.textContent =
-    `Đã nạp ${quizState.allQuestions.length} câu hỏi.`;
-
-  if (quizElements.checkBtn) {
-    quizElements.checkBtn.hidden = false;
-    quizElements.checkBtn.style.display = "inline-flex";
-  }
+  quizState.datasets = buildQuizDatasets(parsedQuestions);
+  quizState.allQuestions = [...quizState.datasets.all.questions];
+  updateLoadStatus();
 
   quizElements.startBtn.addEventListener("click", startQuiz);
   quizElements.prevBtn.addEventListener("click", () => moveQuestion(-1));
   quizElements.nextBtn.addEventListener("click", () => moveQuestion(1));
-  quizElements.checkBtn?.addEventListener("click", revealCurrentQuestion);
+  quizElements.checkAnswerBtn?.addEventListener("click", submitCurrentAnswer);
   quizElements.submitBtn.addEventListener("click", submitQuiz);
-  initQuestionBank();
-}
 
+  initQuestionBank();
+  renderQuestionBank(quizState.allQuestions);
+}
 function getTocGroupLabel(id) {
   if (id === "#nhap-mon") return "Chương nhập môn";
   if (id.startsWith("#c1-")) return "Chương 1";
