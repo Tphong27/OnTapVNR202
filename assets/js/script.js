@@ -306,7 +306,7 @@ function buildQuizDatasets(questions) {
       key: "quiz2",
       label: "Quiz 2",
       questions: questions.filter(
-        (question) => question.number >= 100 && question.number <= 177,
+        (question) => question.number >= 100 && question.number <= 199,
       ),
     },
   };
