@@ -472,17 +472,12 @@ function updateFeedback() {
     return;
   }
 
-  const selectedLabel = formatAnswerKeys(selectedKeys, question.options);
   quizElements.answerFeedback.textContent = isSelectionCorrect(
     question,
     selectedKeys,
   )
     ? "Chính xác. Đáp án đúng là " + correctLabel + "."
-    : "Chưa đúng. Bạn chọn " +
-      selectedLabel +
-      ". Đáp án đúng là " +
-      correctLabel +
-      ".";
+    : "Chưa đúng. Đáp án đúng là " + correctLabel + ".";
 }
 
 function updateCheckAnswerButton(question) {
