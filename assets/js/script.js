@@ -131,6 +131,7 @@ const quizElements = {
   answerFeedback: document.getElementById("quiz-answer-feedback"),
   prevBtn: document.getElementById("quiz-prev-btn"),
   nextBtn: document.getElementById("quiz-next-btn"),
+  checkBtn: document.getElementById("quiz-check-btn"),
   submitBtn: document.getElementById("quiz-submit-btn"),
   score: document.getElementById("quiz-score"),
 };
@@ -141,6 +142,60 @@ const questionBankElements = {
   list: document.getElementById("question-bank-list"),
   empty: document.getElementById("question-bank-empty"),
 };
+
+const QUIZ_OPTION_KEYS = ["A", "B", "C", "D", "E"];
+
+function parseAnswerKeys(value) {
+  const rawValue = String(value || "").toUpperCase().replace(/\.$/, "").trim();
+  const answerParts =
+    rawValue.includes(",")
+      ? rawValue.split(",")
+      : /^[A-E]+$/.test(rawValue)
+        ? rawValue.split("")
+        : [rawValue];
+
+  return answerParts
+    .map((item) => item.trim())
+    .filter((item, index, items) =>
+      /^[A-E]$/.test(item) && items.indexOf(item) === index,
+    );
+}
+
+function getQuestionAnswerKeys(question) {
+  if (!question) return [];
+  if (Array.isArray(question.answerKeys)) return question.answerKeys;
+  return parseAnswerKeys(question.answer);
+}
+
+function getSelectedAnswerKeys(value) {
+  return Array.isArray(value) ? value : [];
+}
+
+function hasAnswerSelection(value) {
+  return getSelectedAnswerKeys(value).length > 0;
+}
+
+function getQuestionOptionKeys(question) {
+  return QUIZ_OPTION_KEYS.filter((key) =>
+    Object.prototype.hasOwnProperty.call(question.options, key),
+  );
+}
+
+function formatAnswerKeys(keys, options) {
+  return keys
+    .map((key) => (options[key] ? `${key}. ${options[key]}` : `${key}.`))
+    .join(", ");
+}
+
+function isSelectionCorrect(question, selectedKeys) {
+  const correctKeys = getQuestionAnswerKeys(question);
+  const pickedKeys = getSelectedAnswerKeys(selectedKeys);
+
+  return (
+    correctKeys.length === pickedKeys.length &&
+    correctKeys.every((key) => pickedKeys.includes(key))
+  );
+}
 
 function parseQuestionBank(rawText) {
   const lines = rawText.replace(/\r/g, "").split("\n");
@@ -168,7 +223,7 @@ function parseQuestionBank(rawText) {
         continue;
       }
 
-      if (/^[A-D]\.\s*/.test(current) || /^\*?\s*\d+\.\s+/.test(current)) {
+      if (/^[A-E](?:\.\s*|:\s*|\s+)/.test(current) || /^\*?\s*\d+\.\s+/.test(current)) {
         break;
       }
 
@@ -180,9 +235,14 @@ function parseQuestionBank(rawText) {
 
     while (i < lines.length) {
       const current = lines[i].trim();
-      if (/^[A-D](?:\.)?$/i.test(current)) break;
+      if (!current) {
+        i += 1;
+        continue;
+      }
 
-      const optionMatch = current.match(/^([A-D])\.\s*(.*)$/);
+      if (/^[A-E](?:\s*,\s*[A-E])*\.?$/i.test(current)) break;
+
+      const optionMatch = current.match(/^([A-E])(?:\.\s*|:\s*|\s+)(.*)$/);
       if (!optionMatch) break;
 
       options[optionMatch[1]] = optionMatch[2].trim();
@@ -193,18 +253,23 @@ function parseQuestionBank(rawText) {
       i += 1;
     }
 
-    let answer = "";
+    let answerKeys = [];
 
     if (i < lines.length) {
-      const answerMatch = lines[i].trim().match(/^([A-D])(?:\.)?$/i);
-      if (answerMatch) {
-        answer = answerMatch[1].toUpperCase();
+      answerKeys = parseAnswerKeys(lines[i].trim().replace(/\.$/, ""));
+      if (answerKeys.length) {
         i += 1;
       }
     }
 
-    if (question && Object.keys(options).length > 0 && answer) {
-      questions.push({ number, question, options, answer });
+    if (question && Object.keys(options).length > 0 && answerKeys.length) {
+      questions.push({
+        number,
+        question,
+        options,
+        answer: answerKeys.join(","),
+        answerKeys,
+      });
     }
   }
 
@@ -236,13 +301,12 @@ function getQuestionSearchText(question) {
     .join(" ");
 
   return normalizeSearchText(
-    `${question.number} ${question.question} ${question.answer} ${optionsText}`,
+    `${question.number} ${question.question} ${getQuestionAnswerKeys(question).join(" ")} ${optionsText}`,
   );
 }
 
 function getCorrectAnswerLabel(question) {
-  const answerText = question.options[question.answer];
-  return answerText ? `${question.answer}. ${answerText}` : `${question.answer}.`;
+  return formatAnswerKeys(getQuestionAnswerKeys(question), question.options);
 }
 
 function getSelectedMode() {
@@ -256,10 +320,16 @@ function updateNavButtons() {
   quizElements.nextBtn.disabled = currentIndex >= activeQuestions.length - 1;
 }
 
+function updateCheckButton() {
+  if (!quizElements.checkBtn) return;
+
+  quizElements.checkBtn.disabled = quizState.revealed[quizState.currentIndex];
+}
+
 function updateProgress() {
   const total = quizState.activeQuestions.length;
   const current = quizState.currentIndex + 1;
-  const answeredCount = quizState.answers.filter(Boolean).length;
+  const answeredCount = quizState.answers.filter(hasAnswerSelection).length;
 
   quizElements.progress.textContent =
     `Câu ${current}/${total} - Đã trả lời ${answeredCount}/${total}`;
@@ -267,8 +337,11 @@ function updateProgress() {
 
 function updateFeedback() {
   const question = quizState.activeQuestions[quizState.currentIndex];
-  const selected = quizState.answers[quizState.currentIndex];
+  const selectedKeys = getSelectedAnswerKeys(
+    quizState.answers[quizState.currentIndex],
+  );
   const revealed = quizState.revealed[quizState.currentIndex];
+  const correctLabel = getCorrectAnswerLabel(question);
 
   if (!question) {
     quizElements.answerFeedback.textContent = "";
@@ -277,45 +350,53 @@ function updateFeedback() {
 
   if (!revealed) {
     quizElements.answerFeedback.textContent =
-      "Chọn đáp án để xem kết quả ngay trên câu hiện tại.";
+      getQuestionAnswerKeys(question).length > 1
+        ? "Chọn một hoặc nhiều đáp án rồi bấm Xem đáp án."
+        : "Chọn đáp án rồi bấm Xem đáp án.";
     return;
   }
 
-  if (!selected) {
-    quizElements.answerFeedback.textContent = `Đáp án đúng là ${question.answer}.`;
+  if (!selectedKeys.length) {
+    quizElements.answerFeedback.textContent = "Đáp án đúng là " + correctLabel + ".";
     return;
   }
 
+  const selectedLabel = formatAnswerKeys(selectedKeys, question.options);
   quizElements.answerFeedback.textContent =
-    selected === question.answer
-      ? `Chính xác. Đáp án đúng là ${question.answer}.`
-      : `Chưa đúng. Bạn chọn ${selected}, đáp án đúng là ${question.answer}.`;
+    isSelectionCorrect(question, selectedKeys)
+      ? "Chính xác. Đáp án đúng là " + correctLabel + "."
+      : "Chưa đúng. Bạn chọn " + selectedLabel + ", đáp án đúng là " + correctLabel + ".";
 }
 
 function renderOptions(question) {
-  const selected = quizState.answers[quizState.currentIndex];
+  const selectedKeys = getSelectedAnswerKeys(
+    quizState.answers[quizState.currentIndex],
+  );
   const revealed = quizState.revealed[quizState.currentIndex];
+  const answerKeys = getQuestionAnswerKeys(question);
+  const isMultipleAnswer = answerKeys.length > 1;
 
   quizElements.options.innerHTML = "";
 
-  ["A", "B", "C", "D"].forEach((key) => {
-    if (!question.options[key]) return;
+  getQuestionOptionKeys(question).forEach((key) => {
+    const optionText = question.options[key];
 
     const optionButton = document.createElement("button");
     optionButton.type = "button";
     optionButton.className = "quiz-option";
     optionButton.dataset.option = key;
-    optionButton.textContent = `${key}. ${question.options[key]}`;
+    optionButton.textContent = key + ". " + optionText;
     optionButton.disabled = revealed;
+    optionButton.setAttribute("aria-pressed", String(selectedKeys.includes(key)));
 
-    if (selected === key) {
+    if (selectedKeys.includes(key)) {
       optionButton.classList.add("selected");
     }
 
     if (revealed) {
-      if (key === question.answer) {
+      if (answerKeys.includes(key)) {
         optionButton.classList.add("correct");
-      } else if (selected === key) {
+      } else if (selectedKeys.includes(key)) {
         optionButton.classList.add("incorrect");
       }
     }
@@ -323,13 +404,29 @@ function renderOptions(question) {
     optionButton.addEventListener("click", () => {
       if (quizState.revealed[quizState.currentIndex]) return;
 
-      quizState.answers[quizState.currentIndex] = key;
-      quizState.revealed[quizState.currentIndex] = true;
+      if (isMultipleAnswer) {
+        const nextSelection = selectedKeys.includes(key)
+          ? selectedKeys.filter((item) => item !== key)
+          : [...selectedKeys, key].sort();
+
+        quizState.answers[quizState.currentIndex] = nextSelection;
+      } else {
+        quizState.answers[quizState.currentIndex] = [key];
+      }
+
       renderCurrentQuestion();
     });
 
     quizElements.options.appendChild(optionButton);
   });
+}
+
+function revealCurrentQuestion() {
+  const question = quizState.activeQuestions[quizState.currentIndex];
+  if (!question) return;
+
+  quizState.revealed[quizState.currentIndex] = true;
+  renderCurrentQuestion();
 }
 
 function renderCurrentQuestion() {
@@ -342,6 +439,7 @@ function renderCurrentQuestion() {
   renderOptions(question);
   updateProgress();
   updateNavButtons();
+  updateCheckButton();
   updateFeedback();
 }
 
@@ -375,11 +473,11 @@ function moveQuestion(step) {
 
 function submitQuiz() {
   const total = quizState.activeQuestions.length;
-  const answered = quizState.answers.filter(Boolean).length;
+  const answered = quizState.answers.filter(hasAnswerSelection).length;
   let correct = 0;
 
   quizState.activeQuestions.forEach((question, index) => {
-    if (quizState.answers[index] === question.answer) {
+    if (isSelectionCorrect(question, quizState.answers[index])) {
       correct += 1;
     }
   });
@@ -432,20 +530,20 @@ function renderQuestionBank(questions) {
     const options = document.createElement("div");
     options.className = "question-bank-options";
 
-    ["A", "B", "C", "D"].forEach((key) => {
-      if (!question.options[key]) return;
+    getQuestionOptionKeys(question).forEach((key) => {
+      const optionText = question.options[key];
 
       const option = document.createElement("div");
       option.className = "question-bank-option";
 
-      if (key === question.answer) {
+      if (getQuestionAnswerKeys(question).includes(key)) {
         option.classList.add("correct");
       }
 
       const label = document.createElement("strong");
-      label.textContent = `${key}. `;
+      label.textContent = key + ". ";
       option.appendChild(label);
-      option.append(question.options[key]);
+      option.append(optionText);
       options.appendChild(option);
     });
 
@@ -499,7 +597,7 @@ function initQuiz() {
 
   if (!quizState.allQuestions.length) {
     quizElements.loadStatus.textContent =
-      "Không đọc được bộ câu hỏi từ pt.txt. Vui lòng kiểm tra file dữ liệu.";
+      "Không đọc được bộ câu hỏi từ quiz-data.js. Vui lòng kiểm tra file dữ liệu.";
     quizElements.startBtn.disabled = true;
     if (questionBankElements.count) {
       questionBankElements.count.textContent = "Không tải được dữ liệu câu hỏi.";
@@ -515,14 +613,15 @@ function initQuiz() {
   quizElements.loadStatus.textContent =
     `Đã nạp ${quizState.allQuestions.length} câu hỏi.`;
 
-  const legacyCheckButton = document.getElementById("quiz-check-btn");
-  if (legacyCheckButton) {
-    legacyCheckButton.hidden = true;
+  if (quizElements.checkBtn) {
+    quizElements.checkBtn.hidden = false;
+    quizElements.checkBtn.style.display = "inline-flex";
   }
 
   quizElements.startBtn.addEventListener("click", startQuiz);
   quizElements.prevBtn.addEventListener("click", () => moveQuestion(-1));
   quizElements.nextBtn.addEventListener("click", () => moveQuestion(1));
+  quizElements.checkBtn?.addEventListener("click", revealCurrentQuestion);
   quizElements.submitBtn.addEventListener("click", submitQuiz);
   initQuestionBank();
 }
