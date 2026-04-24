@@ -290,13 +290,15 @@ button {
   margin-bottom: 18px;
 }
 
-.quiz-mode-group {
+.quiz-mode-group,
+.question-bank-mode-group {
   display: grid;
   gap: 10px;
   margin-bottom: 14px;
 }
 
-.quiz-mode-item {
+.quiz-mode-item,
+.question-bank-mode-item {
   display: flex;
   align-items: center;
   gap: 8px;
@@ -304,7 +306,8 @@ button {
   color: var(--mid);
 }
 
-.quiz-mode-item input {
+.quiz-mode-item input,
+.question-bank-mode-item input {
   accent-color: var(--red);
 }
 
@@ -529,6 +532,13 @@ button {
   color: var(--mid);
   font-size: 0.92rem;
   font-weight: 600;
+}
+
+.question-bank-mode-group {
+  padding: 14px 16px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: #fff7e9;
 }
 
 .question-bank-search {

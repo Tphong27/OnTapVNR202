@@ -115,6 +115,7 @@ function initMobileSidebar() {
 const quizState = {
   datasets: {},
   allQuestions: [],
+  predictedQuestions: [],
   activeQuestions: [],
   answers: [],
   revealed: [],
@@ -123,6 +124,7 @@ const quizState = {
 
 const quizElements = {
   startBtn: document.getElementById("quiz-start-btn"),
+  modeInputs: Array.from(document.querySelectorAll('input[name="quiz-mode"]')),
   loadStatus: document.getElementById("quiz-load-status"),
   playground: document.getElementById("quiz-playground"),
   progress: document.getElementById("quiz-progress"),
@@ -139,6 +141,9 @@ const quizElements = {
 };
 
 const questionBankElements = {
+  modeInputs: Array.from(
+    document.querySelectorAll('input[name="question-bank-mode"]'),
+  ),
   searchInput: document.getElementById("question-bank-search"),
   count: document.getElementById("question-bank-count"),
   list: document.getElementById("question-bank-list"),
@@ -146,6 +151,7 @@ const questionBankElements = {
 };
 
 const QUIZ_OPTION_KEYS = ["A", "B", "C", "D", "E"];
+const PREDICTED_QUIZ_DATA_URL = "data/de_du_doan_50_cau.txt";
 
 function parseAnswerKeys(value) {
   const rawValue = String(value || "")
@@ -288,7 +294,7 @@ function parseQuestionBank(rawText) {
   return questions.sort((a, b) => a.number - b.number);
 }
 
-function buildQuizDatasets(questions) {
+function buildQuizDatasets(questions, predictedQuestions = []) {
   return {
     all: {
       key: "all",
@@ -309,7 +315,26 @@ function buildQuizDatasets(questions) {
         (question) => question.number >= 100 && question.number <= 199,
       ),
     },
+    quiz3: {
+      key: "quiz3",
+      label: "Quiz 3",
+      questions: predictedQuestions,
+    },
   };
+}
+
+async function loadTextDataset(url) {
+  if (typeof fetch !== "function") {
+    throw new Error("Trình duyệt hiện tại không hỗ trợ fetch.");
+  }
+
+  const response = await fetch(url, { cache: "no-store" });
+
+  if (!response.ok) {
+    throw new Error(`Không thể tải dữ liệu từ ${url}.`);
+  }
+
+  return response.text();
 }
 
 function shuffleArray(input) {
@@ -350,6 +375,74 @@ function getSelectedMode() {
   return selected ? selected.value : "random25";
 }
 
+function getSelectedQuestionBankMode() {
+  const selected = document.querySelector(
+    'input[name="question-bank-mode"]:checked',
+  );
+  return selected ? selected.value : "official";
+}
+
+function getQuestionBankDataset(mode = getSelectedQuestionBankMode()) {
+  if (mode === "predicted") {
+    return {
+      key: "predicted",
+      label: "Đề dự đoán",
+      questions: [...quizState.predictedQuestions],
+      unavailableMessage:
+        'Chưa tải được dữ liệu "Đề dự đoán" từ de_du_doan_50_cau.txt.',
+    };
+  }
+
+  return {
+    key: "official",
+    label: "Đề thi đã ra",
+    questions: [...quizState.allQuestions],
+    unavailableMessage: "Chưa có dữ liệu cho bộ đề đã ra.",
+  };
+}
+
+function syncQuizModeAvailability() {
+  const quiz3Input = quizElements.modeInputs.find(
+    (input) => input.value === "quiz3",
+  );
+
+  if (!quiz3Input) return;
+
+  const hasQuiz3Questions = quizState.predictedQuestions.length > 0;
+  quiz3Input.disabled = !hasQuiz3Questions;
+
+  if (!hasQuiz3Questions && quiz3Input.checked) {
+    const fallbackInput =
+      quizElements.modeInputs.find((input) => input.value === "random25") ||
+      quizElements.modeInputs[0];
+
+    if (fallbackInput) {
+      fallbackInput.checked = true;
+    }
+  }
+}
+
+function syncQuestionBankModeAvailability() {
+  const predictedInput = questionBankElements.modeInputs.find(
+    (input) => input.value === "predicted",
+  );
+
+  if (!predictedInput) return;
+
+  const hasPredictedQuestions = quizState.predictedQuestions.length > 0;
+  predictedInput.disabled = !hasPredictedQuestions;
+
+  if (!hasPredictedQuestions && predictedInput.checked) {
+    const officialInput = questionBankElements.modeInputs.find(
+      (input) => input.value === "official",
+    );
+
+    if (officialInput) {
+      officialInput.checked = true;
+    }
+  }
+}
+
 function updateQuestionHint(question) {
   if (!quizElements.questionHint) return;
 
@@ -379,6 +472,42 @@ function resetQuizSession() {
   quizElements.score.textContent = "";
   updateQuestionHint(null);
   updateCheckAnswerButton(null);
+}
+
+function renderCurrentQuestion() {
+  const question = quizState.activeQuestions[quizState.currentIndex];
+  if (!question) return;
+
+  const currentMode = getSelectedMode();
+  const questionLabel =
+    currentMode === "quiz3" ? "Câu dự đoán" : "Câu gốc";
+
+  quizElements.questionId.textContent = `${questionLabel} #${question.number}`;
+  quizElements.questionText.textContent = question.question;
+  updateQuestionHint(question);
+  renderOptions(question);
+  updateProgress();
+  updateNavButtons();
+  updateFeedback();
+  updateCheckAnswerButton(question);
+}
+
+function renderCurrentQuestion() {
+  const question = quizState.activeQuestions[quizState.currentIndex];
+  if (!question) return;
+
+  const currentMode = getSelectedMode();
+  const questionLabel =
+    currentMode === "quiz3" ? "Câu dự đoán" : "Câu gốc";
+
+  quizElements.questionId.textContent = `${questionLabel} #${question.number}`;
+  quizElements.questionText.textContent = question.question;
+  updateQuestionHint(question);
+  renderOptions(question);
+  updateProgress();
+  updateNavButtons();
+  updateFeedback();
+  updateCheckAnswerButton(question);
 }
 
 function updateLoadStatus() {
@@ -801,6 +930,234 @@ function initQuiz() {
   initQuestionBank();
   renderQuestionBank(quizState.allQuestions);
 }
+
+function renderCurrentQuestion() {
+  const question = quizState.activeQuestions[quizState.currentIndex];
+  if (!question) return;
+
+  const currentMode = getSelectedMode();
+  const questionLabel =
+    currentMode === "quiz3" ? "Câu dự đoán" : "Câu gốc";
+
+  quizElements.questionId.textContent = `${questionLabel} #${question.number}`;
+  quizElements.questionText.textContent = question.question;
+  updateQuestionHint(question);
+  renderOptions(question);
+  updateProgress();
+  updateNavButtons();
+  updateFeedback();
+  updateCheckAnswerButton(question);
+}
+
+function updateLoadStatus() {
+  const total = quizState.datasets.all?.questions.length || 0;
+  const quiz1 = quizState.datasets.quiz1?.questions.length || 0;
+  const quiz2 = quizState.datasets.quiz2?.questions.length || 0;
+  const quiz3 = quizState.datasets.quiz3?.questions.length || 0;
+
+  quizElements.loadStatus.textContent =
+    quiz3 > 0
+      ? `Đã nạp ${total} câu hỏi chính thức. Quiz 1 có ${quiz1} câu, Quiz 2 có ${quiz2} câu, Quiz 3 có ${quiz3} câu dự đoán.`
+      : `Đã nạp ${total} câu hỏi chính thức. Quiz 1 có ${quiz1} câu, Quiz 2 có ${quiz2} câu. Chưa tải được Quiz 3 từ de_du_doan_50_cau.txt.`;
+}
+
+function getQuestionsForMode(mode) {
+  if (mode === "quiz1") {
+    return [...(quizState.datasets.quiz1?.questions || [])];
+  }
+
+  if (mode === "quiz2") {
+    return [...(quizState.datasets.quiz2?.questions || [])];
+  }
+
+  if (mode === "quiz3") {
+    return [...(quizState.datasets.quiz3?.questions || [])];
+  }
+
+  return [...(quizState.datasets.all?.questions || [])];
+}
+
+function renderQuestionBank(questions, dataset, keyword = "") {
+  if (
+    !questionBankElements.list ||
+    !questionBankElements.empty ||
+    !questionBankElements.count
+  ) {
+    return;
+  }
+
+  const sourceTotal = dataset?.questions.length || 0;
+  const sourceLabel = dataset?.label || "Ngân hàng câu hỏi";
+
+  questionBankElements.list.innerHTML = "";
+  questionBankElements.empty.hidden = true;
+  questionBankElements.count.textContent = `${sourceLabel}: hiển thị ${questions.length}/${sourceTotal} câu`;
+
+  if (!sourceTotal) {
+    questionBankElements.empty.hidden = false;
+    questionBankElements.empty.textContent =
+      dataset?.unavailableMessage || `${sourceLabel} chưa có dữ liệu.`;
+    return;
+  }
+
+  if (!questions.length) {
+    questionBankElements.empty.hidden = false;
+    questionBankElements.empty.textContent = keyword
+      ? `Không tìm thấy câu hỏi phù hợp trong ${sourceLabel.toLowerCase()}.`
+      : `Chưa có câu hỏi nào trong ${sourceLabel.toLowerCase()}.`;
+    return;
+  }
+
+  const fragment = document.createDocumentFragment();
+
+  questions.forEach((question) => {
+    const card = document.createElement("article");
+    card.className = "question-bank-card";
+
+    const meta = document.createElement("div");
+    meta.className = "question-bank-card__meta";
+
+    const id = document.createElement("p");
+    id.className = "question-bank-card__id";
+    id.textContent = `Câu #${question.number}`;
+
+    const answer = document.createElement("p");
+    answer.className = "question-bank-card__answer";
+    answer.textContent = `Đáp án đúng: ${getCorrectAnswerLabel(question)}`;
+
+    meta.append(id, answer);
+
+    const title = document.createElement("h4");
+    title.className = "question-bank-card__question";
+    title.textContent = question.question;
+
+    const options = document.createElement("div");
+    options.className = "question-bank-options";
+
+    getQuestionOptionKeys(question).forEach((key) => {
+      const optionText = question.options[key];
+
+      const option = document.createElement("div");
+      option.className = "question-bank-option";
+
+      if (getQuestionAnswerKeys(question).includes(key)) {
+        option.classList.add("correct");
+      }
+
+      const label = document.createElement("strong");
+      label.textContent = key + ". ";
+      option.appendChild(label);
+      option.append(optionText);
+      options.appendChild(option);
+    });
+
+    card.append(meta, title, options);
+    fragment.appendChild(card);
+  });
+
+  questionBankElements.list.appendChild(fragment);
+}
+
+function filterQuestionBank() {
+  const dataset = getQuestionBankDataset();
+  const keyword = normalizeSearchText(questionBankElements.searchInput?.value);
+  const sourceQuestions = dataset.questions;
+
+  if (!keyword) {
+    renderQuestionBank(sourceQuestions, dataset);
+    return;
+  }
+
+  const filteredQuestions = sourceQuestions.filter((question) =>
+    getQuestionSearchText(question).includes(keyword),
+  );
+
+  renderQuestionBank(filteredQuestions, dataset, keyword);
+}
+
+function initQuestionBank() {
+  if (
+    !questionBankElements.searchInput ||
+    !questionBankElements.count ||
+    !questionBankElements.list ||
+    !questionBankElements.empty
+  ) {
+    return;
+  }
+
+  questionBankElements.searchInput.addEventListener(
+    "input",
+    filterQuestionBank,
+  );
+
+  questionBankElements.modeInputs.forEach((input) => {
+    input.addEventListener("change", filterQuestionBank);
+  });
+}
+
+async function initQuiz() {
+  if (
+    !quizElements.startBtn ||
+    !quizElements.loadStatus ||
+    !quizElements.playground
+  ) {
+    return;
+  }
+
+  const raw = typeof window.QUIZ_RAW === "string" ? window.QUIZ_RAW : "";
+  const parsedQuestions = parseQuestionBank(raw);
+
+  if (!parsedQuestions.length) {
+    quizElements.loadStatus.textContent =
+      "Không đọc được bộ câu hỏi từ quiz-data.js. Vui lòng kiểm tra file dữ liệu.";
+    quizElements.startBtn.disabled = true;
+    if (questionBankElements.count) {
+      questionBankElements.count.textContent =
+        "Không tải được dữ liệu câu hỏi.";
+    }
+    if (questionBankElements.empty) {
+      questionBankElements.empty.hidden = false;
+      questionBankElements.empty.textContent =
+        "Không đọc được bộ câu hỏi hiện tại.";
+    }
+    return;
+  }
+
+  let predictedQuestions = [];
+  const embeddedPredictedRaw =
+    typeof window.QUIZ_PREDICTED_RAW === "string"
+      ? window.QUIZ_PREDICTED_RAW
+      : "";
+
+  if (embeddedPredictedRaw) {
+    predictedQuestions = parseQuestionBank(embeddedPredictedRaw);
+  } else {
+    try {
+      const predictedRaw = await loadTextDataset(PREDICTED_QUIZ_DATA_URL);
+      predictedQuestions = parseQuestionBank(predictedRaw);
+    } catch (error) {
+      predictedQuestions = [];
+    }
+  }
+
+  quizState.datasets = buildQuizDatasets(parsedQuestions, predictedQuestions);
+  quizState.allQuestions = [...quizState.datasets.all.questions];
+  quizState.predictedQuestions = [...quizState.datasets.quiz3.questions];
+
+  syncQuizModeAvailability();
+  syncQuestionBankModeAvailability();
+  updateLoadStatus();
+
+  quizElements.startBtn.addEventListener("click", startQuiz);
+  quizElements.prevBtn.addEventListener("click", () => moveQuestion(-1));
+  quizElements.nextBtn.addEventListener("click", () => moveQuestion(1));
+  quizElements.checkAnswerBtn?.addEventListener("click", submitCurrentAnswer);
+  quizElements.submitBtn.addEventListener("click", submitQuiz);
+
+  initQuestionBank();
+  filterQuestionBank();
+}
+
 function getTocGroupLabel(id) {
   if (id === "#nhap-mon") return "Chương nhập môn";
   if (id.startsWith("#c1-")) return "Chương 1";

@@ -2112,6 +2112,10 @@
                 <input type="radio" name="quiz-mode" value="quiz2" />
                 &#212;n t&#7853;p Quiz 2 (c&#226;u 100-199)
               </label>
+              <label class="quiz-mode-item">
+                <input type="radio" name="quiz-mode" value="quiz3" />
+                &#212;n t&#7853;p Quiz 3 (&#273;&#7873; d&#7921; &#273;o&#225;n)
+              </label>
             </div>
 
             <button id="quiz-start-btn" class="quiz-btn primary" type="button">
@@ -2173,6 +2177,26 @@
               </p>
             </div>
 
+            <div class="question-bank-mode-group" role="radiogroup" aria-label="Ch&#7885;n ngu&#7891;n c&#226;u h&#7887;i">
+              <label class="question-bank-mode-item">
+                <input
+                  type="radio"
+                  name="question-bank-mode"
+                  value="official"
+                  checked
+                />
+                &#272;&#7873; thi &#273;&#227; ra (1-199)
+              </label>
+              <label class="question-bank-mode-item">
+                <input
+                  type="radio"
+                  name="question-bank-mode"
+                  value="predicted"
+                />
+                &#272;&#7873; d&#7921; &#273;o&#225;n
+              </label>
+            </div>
+
             <label class="question-bank-search-wrap" for="question-bank-search">
               <span>Tìm câu hỏi</span>
               <input
@@ -2219,6 +2243,7 @@
     </div>
 
     <script src="data/quiz-data.js"></script>
+    <script src="data/quiz-data1.js"></script>
     <script src="assets/js/script.js"></script>
   </body>
 </html>
