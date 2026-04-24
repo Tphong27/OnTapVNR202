@@ -633,7 +633,7 @@ A. Đông Dương Cộng sản Liên đoàn
 B. Đông Dương Cộng sản Đảng
 C. Hội Việt Nam Cách mạng Thanh niên
 D. An Nam Cộng sản Đảng
-D
+B
 
 92. Khẩu hiệu "Không thành công thì cũng thành nhân" được sử dụng trong cuộc khởi nghĩa nào dưới đây?
 A. Ba Đình
