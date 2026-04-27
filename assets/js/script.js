@@ -116,6 +116,7 @@ const quizState = {
   datasets: {},
   allQuestions: [],
   predictedQuestions: [],
+  finalExamQuestions: [],
   activeQuestions: [],
   answers: [],
   revealed: [],
@@ -152,17 +153,20 @@ const questionBankElements = {
 
 const QUIZ_OPTION_KEYS = ["A", "B", "C", "D", "E"];
 const PREDICTED_QUIZ_DATA_URL = "data/de_du_doan_50_cau.txt";
+const FINAL_EXAM_QUIZ_DATA_URL = "data/VNR202_FE.txt";
 
 function parseAnswerKeys(value) {
   const rawValue = String(value || "")
     .toUpperCase()
     .replace(/\.$/, "")
     .trim();
-  const answerParts = rawValue.includes(",")
-    ? rawValue.split(",")
-    : /^[A-E]+$/.test(rawValue)
-      ? rawValue.split("")
-      : [rawValue];
+  const keyPrefixMatch = rawValue.match(/^([A-E](?:\s*,\s*[A-E])+|[A-E]+)\b/);
+  const answerValue = keyPrefixMatch ? keyPrefixMatch[1] : rawValue;
+  const answerParts = answerValue.includes(",")
+    ? answerValue.split(",")
+    : /^[A-E]+$/.test(answerValue)
+      ? answerValue.split("")
+      : [answerValue];
 
   return answerParts
     .map((item) => item.trim())
@@ -294,7 +298,123 @@ function parseQuestionBank(rawText) {
   return questions.sort((a, b) => a.number - b.number);
 }
 
-function buildQuizDatasets(questions, predictedQuestions = []) {
+function parseFinalExamQuestionBank(rawText) {
+  const lines = rawText.replace(/\r/g, "").split("\n");
+  const questions = [];
+  let currentQuestion = null;
+  let currentSection = "";
+  let currentOptionKey = "";
+
+  const pushCurrentQuestion = () => {
+    if (
+      currentQuestion &&
+      currentQuestion.question &&
+      Object.keys(currentQuestion.options).length > 0 &&
+      currentQuestion.answer
+    ) {
+      questions.push(currentQuestion);
+    }
+  };
+
+  lines.forEach((rawLine) => {
+    const line = rawLine.trim();
+    if (!line) return;
+
+    const numberMatch = line.match(/^Câu\s*số:\s*(\d+)/i);
+    if (numberMatch) {
+      pushCurrentQuestion();
+      currentQuestion = {
+        number: Number(numberMatch[1]),
+        question: "",
+        options: {},
+        answer: "",
+        answerKeys: [],
+        explanation: "",
+      };
+      currentSection = "";
+      currentOptionKey = "";
+      return;
+    }
+
+    if (!currentQuestion) return;
+
+    const questionMatch = line.match(/^Câu\s*hỏi:\s*(.*)$/i);
+    if (questionMatch) {
+      currentSection = "question";
+      currentOptionKey = "";
+      currentQuestion.question = questionMatch[1].trim();
+      return;
+    }
+
+    if (/^Các\s+đáp\s+án:/i.test(line)) {
+      currentSection = "options";
+      currentOptionKey = "";
+      return;
+    }
+
+    const answerMatch = line.match(/^Đáp\s*án\s*đúng:\s*(.+)$/i);
+    if (answerMatch) {
+      const answerDetail = parseAnswerDetail(answerMatch[1]);
+      currentSection = "answer";
+      currentOptionKey = "";
+      currentQuestion.answerKeys = answerDetail.answerKeys;
+      currentQuestion.answer = answerDetail.answer;
+      currentQuestion.explanation = answerDetail.explanation;
+      return;
+    }
+
+    const explanationMatch = line.match(/^Giải\s*thích:\s*(.+)$/i);
+    if (explanationMatch) {
+      currentSection = "explanation";
+      currentOptionKey = "";
+      currentQuestion.explanation = cleanAnswerExplanation(explanationMatch[1]);
+      return;
+    }
+
+    if (currentSection === "question") {
+      currentQuestion.question += ` ${line}`;
+      return;
+    }
+
+    if (currentSection === "options") {
+      const optionMatch = line.match(/^([A-E])(?:\.\s*|:\s*|\s+)(.*)$/);
+      if (optionMatch) {
+        currentOptionKey = optionMatch[1];
+        currentQuestion.options[currentOptionKey] = optionMatch[2].trim();
+        return;
+      }
+
+      if (currentOptionKey) {
+        currentQuestion.options[currentOptionKey] += ` ${line}`;
+      }
+    }
+
+    if (currentSection === "answer") {
+      if (currentQuestion.explanation) {
+        currentQuestion.explanation = cleanAnswerExplanation(
+          `${currentQuestion.explanation} ${line}`,
+        );
+      } else if (!getQuestionAnswerKeys(currentQuestion).length) {
+        currentQuestion.answer = `${currentQuestion.answer} ${line}`.trim();
+      }
+    }
+
+    if (currentSection === "explanation") {
+      currentQuestion.explanation = cleanAnswerExplanation(
+        `${currentQuestion.explanation} ${line}`,
+      );
+    }
+  });
+
+  pushCurrentQuestion();
+  return questions.sort((a, b) => a.number - b.number);
+}
+
+function buildQuizDatasets(
+  questions,
+  predictedQuestions = [],
+  finalExamQuestions = [],
+) {
   return {
     all: {
       key: "all",
@@ -319,6 +439,11 @@ function buildQuizDatasets(questions, predictedQuestions = []) {
       key: "quiz3",
       label: "Quiz 3",
       questions: predictedQuestions,
+    },
+    finalExam: {
+      key: "finalExam",
+      label: "Final Exam",
+      questions: finalExamQuestions,
     },
   };
 }
@@ -367,7 +492,54 @@ function getQuestionSearchText(question) {
 }
 
 function getCorrectAnswerLabel(question) {
-  return formatAnswerKeys(getQuestionAnswerKeys(question), question.options);
+  const answerKeys = getQuestionAnswerKeys(question);
+  if (!answerKeys.length) {
+    return question?.answer || "Chưa ghi rõ trong file";
+  }
+
+  return formatAnswerKeys(answerKeys, question.options);
+}
+
+function cleanAnswerExplanation(value) {
+  let explanation = String(value || "").trim();
+
+  if (explanation.startsWith("(") && explanation.endsWith(")")) {
+    explanation = explanation.slice(1, -1).trim();
+  }
+
+  return explanation;
+}
+
+function parseAnswerDetail(value) {
+  const rawAnswer = String(value || "").trim();
+  const keyMatch = rawAnswer.match(/^([A-E](?:\s*,\s*[A-E])+|[A-E]+)\b/i);
+
+  if (!keyMatch) {
+    return {
+      answerKeys: [],
+      answer: rawAnswer,
+      explanation: "",
+    };
+  }
+
+  const answerKeys = parseAnswerKeys(keyMatch[1]);
+  const explanation = cleanAnswerExplanation(rawAnswer.slice(keyMatch[0].length));
+
+  return {
+    answerKeys,
+    answer: answerKeys.join(","),
+    explanation,
+  };
+}
+
+function getQuestionExplanationText(question) {
+  return question?.explanation
+    ? ` Giải thích: ${question.explanation}`
+    : "";
+}
+
+function getGradableQuestions(questions) {
+  return questions.filter((question) => getQuestionAnswerKeys(question).length > 0);
 }
 
 function getSelectedMode() {
@@ -393,6 +565,16 @@ function getQuestionBankDataset(mode = getSelectedQuestionBankMode()) {
     };
   }
 
+  if (mode === "finalExam") {
+    return {
+      key: "finalExam",
+      label: "Ngân hàng câu hỏi FE",
+      questions: [...quizState.finalExamQuestions],
+      unavailableMessage:
+        'Chưa tải được dữ liệu "Ngân hàng câu hỏi FE" từ VNR202_FE.txt.',
+    };
+  }
+
   return {
     key: "official",
     label: "Đề thi đã ra",
@@ -402,16 +584,24 @@ function getQuestionBankDataset(mode = getSelectedQuestionBankMode()) {
 }
 
 function syncQuizModeAvailability() {
-  const quiz3Input = quizElements.modeInputs.find(
-    (input) => input.value === "quiz3",
-  );
+  const hasFinalExamQuizQuestions =
+    getGradableQuestions(quizState.finalExamQuestions).length > 0;
+  const availability = {
+    quiz3: quizState.predictedQuestions.length > 0,
+    finalExamRandom60: hasFinalExamQuizQuestions,
+    finalExamAll: hasFinalExamQuizQuestions,
+  };
 
-  if (!quiz3Input) return;
+  quizElements.modeInputs.forEach((input) => {
+    if (!Object.prototype.hasOwnProperty.call(availability, input.value)) {
+      return;
+    }
 
-  const hasQuiz3Questions = quizState.predictedQuestions.length > 0;
-  quiz3Input.disabled = !hasQuiz3Questions;
+    input.disabled = !availability[input.value];
+  });
 
-  if (!hasQuiz3Questions && quiz3Input.checked) {
+  const selectedMode = getSelectedMode();
+  if (availability[selectedMode] === false) {
     const fallbackInput =
       quizElements.modeInputs.find((input) => input.value === "random25") ||
       quizElements.modeInputs[0];
@@ -423,16 +613,21 @@ function syncQuizModeAvailability() {
 }
 
 function syncQuestionBankModeAvailability() {
-  const predictedInput = questionBankElements.modeInputs.find(
-    (input) => input.value === "predicted",
-  );
+  const availability = {
+    predicted: quizState.predictedQuestions.length > 0,
+    finalExam: quizState.finalExamQuestions.length > 0,
+  };
 
-  if (!predictedInput) return;
+  questionBankElements.modeInputs.forEach((input) => {
+    if (!Object.prototype.hasOwnProperty.call(availability, input.value)) {
+      return;
+    }
 
-  const hasPredictedQuestions = quizState.predictedQuestions.length > 0;
-  predictedInput.disabled = !hasPredictedQuestions;
+    input.disabled = !availability[input.value];
+  });
 
-  if (!hasPredictedQuestions && predictedInput.checked) {
+  const selectedMode = getSelectedQuestionBankMode();
+  if (availability[selectedMode] === false) {
     const officialInput = questionBankElements.modeInputs.find(
       (input) => input.value === "official",
     );
@@ -479,8 +674,11 @@ function renderCurrentQuestion() {
   if (!question) return;
 
   const currentMode = getSelectedMode();
-  const questionLabel =
-    currentMode === "quiz3" ? "Câu dự đoán" : "Câu gốc";
+  const questionLabel = currentMode.startsWith("finalExam")
+    ? "Câu FE"
+    : currentMode === "quiz3"
+      ? "Câu dự đoán"
+      : "Câu gốc";
 
   quizElements.questionId.textContent = `${questionLabel} #${question.number}`;
   quizElements.questionText.textContent = question.question;
@@ -497,8 +695,11 @@ function renderCurrentQuestion() {
   if (!question) return;
 
   const currentMode = getSelectedMode();
-  const questionLabel =
-    currentMode === "quiz3" ? "Câu dự đoán" : "Câu gốc";
+  const questionLabel = currentMode.startsWith("finalExam")
+    ? "Câu FE"
+    : currentMode === "quiz3"
+      ? "Câu dự đoán"
+      : "Câu gốc";
 
   quizElements.questionId.textContent = `${questionLabel} #${question.number}`;
   quizElements.questionText.textContent = question.question;
@@ -576,6 +777,7 @@ function updateFeedback() {
   const revealed = quizState.revealed[quizState.currentIndex];
   const requiredAnswerCount = getQuestionAnswerKeys(question).length;
   const correctLabel = getCorrectAnswerLabel(question);
+  const explanationText = getQuestionExplanationText(question);
 
   if (!revealed) {
     if (isMultipleAnswerQuestion(question)) {
@@ -597,7 +799,7 @@ function updateFeedback() {
 
   if (!selectedKeys.length) {
     quizElements.answerFeedback.textContent =
-      "Đáp án đúng là " + correctLabel + ".";
+      "Đáp án đúng là " + correctLabel + "." + explanationText;
     return;
   }
 
@@ -605,8 +807,8 @@ function updateFeedback() {
     question,
     selectedKeys,
   )
-    ? "Chính xác. Đáp án đúng là " + correctLabel + "."
-    : "Chưa đúng. Đáp án đúng là " + correctLabel + ".";
+    ? "Chính xác. Đáp án đúng là " + correctLabel + "." + explanationText
+    : "Chưa đúng. Đáp án đúng là " + correctLabel + "." + explanationText;
 }
 
 function updateCheckAnswerButton(question) {
@@ -713,6 +915,8 @@ function renderCurrentQuestion() {
 function startQuiz() {
   const mode = getSelectedMode();
   const sourceQuestions = getQuestionsForMode(mode);
+  const randomQuestionCount =
+    mode === "finalExamRandom60" ? 60 : mode === "random25" ? 25 : null;
 
   if (!sourceQuestions.length) {
     quizElements.loadStatus.textContent =
@@ -721,10 +925,10 @@ function startQuiz() {
   }
 
   quizState.activeQuestions =
-    mode === "random25"
+    randomQuestionCount
       ? shuffleArray(sourceQuestions).slice(
           0,
-          Math.min(25, sourceQuestions.length),
+          Math.min(randomQuestionCount, sourceQuestions.length),
         )
       : sourceQuestions;
   quizState.answers = new Array(quizState.activeQuestions.length).fill(null);
@@ -936,8 +1140,11 @@ function renderCurrentQuestion() {
   if (!question) return;
 
   const currentMode = getSelectedMode();
-  const questionLabel =
-    currentMode === "quiz3" ? "Câu dự đoán" : "Câu gốc";
+  const questionLabel = currentMode.startsWith("finalExam")
+    ? "Câu FE"
+    : currentMode === "quiz3"
+      ? "Câu dự đoán"
+      : "Câu gốc";
 
   quizElements.questionId.textContent = `${questionLabel} #${question.number}`;
   quizElements.questionText.textContent = question.question;
@@ -954,11 +1161,13 @@ function updateLoadStatus() {
   const quiz1 = quizState.datasets.quiz1?.questions.length || 0;
   const quiz2 = quizState.datasets.quiz2?.questions.length || 0;
   const quiz3 = quizState.datasets.quiz3?.questions.length || 0;
+  const finalExam = quizState.datasets.finalExam?.questions.length || 0;
+  const finalExamGradable = getGradableQuestions(
+    quizState.datasets.finalExam?.questions || [],
+  ).length;
 
   quizElements.loadStatus.textContent =
-    quiz3 > 0
-      ? `Đã nạp ${total} câu hỏi chính thức. Quiz 1 có ${quiz1} câu, Quiz 2 có ${quiz2} câu, Quiz 3 có ${quiz3} câu dự đoán.`
-      : `Đã nạp ${total} câu hỏi chính thức. Quiz 1 có ${quiz1} câu, Quiz 2 có ${quiz2} câu. Chưa tải được Quiz 3 từ de_du_doan_50_cau.txt.`;
+    `Đã nạp ${total} câu hỏi chính thức. Quiz 1 có ${quiz1} câu, Quiz 2 có ${quiz2} câu, Quiz 3 có ${quiz3} câu dự đoán, FE có ${finalExam} câu (${finalExamGradable} câu có đáp án).`;
 }
 
 function getQuestionsForMode(mode) {
@@ -972,6 +1181,10 @@ function getQuestionsForMode(mode) {
 
   if (mode === "quiz3") {
     return [...(quizState.datasets.quiz3?.questions || [])];
+  }
+
+  if (mode === "finalExamRandom60" || mode === "finalExamAll") {
+    return getGradableQuestions(quizState.datasets.finalExam?.questions || []);
   }
 
   return [...(quizState.datasets.all?.questions || [])];
@@ -1052,6 +1265,14 @@ function renderQuestionBank(questions, dataset, keyword = "") {
     });
 
     card.append(meta, title, options);
+
+    if (question.explanation) {
+      const explanation = document.createElement("p");
+      explanation.className = "question-bank-card__explanation";
+      explanation.textContent = `Giải thích: ${question.explanation}`;
+      card.appendChild(explanation);
+    }
+
     fragment.appendChild(card);
   });
 
@@ -1124,6 +1345,7 @@ async function initQuiz() {
   }
 
   let predictedQuestions = [];
+  let finalExamQuestions = [];
   const embeddedPredictedRaw =
     typeof window.QUIZ_PREDICTED_RAW === "string"
       ? window.QUIZ_PREDICTED_RAW
@@ -1140,9 +1362,30 @@ async function initQuiz() {
     }
   }
 
-  quizState.datasets = buildQuizDatasets(parsedQuestions, predictedQuestions);
+  const embeddedFinalExamRaw =
+    typeof window.QUIZ_FINAL_EXAM_RAW === "string"
+      ? window.QUIZ_FINAL_EXAM_RAW
+      : "";
+
+  if (embeddedFinalExamRaw) {
+    finalExamQuestions = parseFinalExamQuestionBank(embeddedFinalExamRaw);
+  } else {
+    try {
+      const finalExamRaw = await loadTextDataset(FINAL_EXAM_QUIZ_DATA_URL);
+      finalExamQuestions = parseFinalExamQuestionBank(finalExamRaw);
+    } catch (error) {
+      finalExamQuestions = [];
+    }
+  }
+
+  quizState.datasets = buildQuizDatasets(
+    parsedQuestions,
+    predictedQuestions,
+    finalExamQuestions,
+  );
   quizState.allQuestions = [...quizState.datasets.all.questions];
   quizState.predictedQuestions = [...quizState.datasets.quiz3.questions];
+  quizState.finalExamQuestions = [...quizState.datasets.finalExam.questions];
 
   syncQuizModeAvailability();
   syncQuestionBankModeAvailability();

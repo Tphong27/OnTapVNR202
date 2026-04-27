@@ -297,6 +297,15 @@ button {
   margin-bottom: 14px;
 }
 
+.quiz-mode-section-title {
+  margin: 6px 0 0;
+  font-size: 0.82rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--accent);
+}
+
 .quiz-mode-item,
 .question-bank-mode-item {
   display: flex;
@@ -633,6 +642,17 @@ button {
 
 .question-bank-option strong {
   color: #7a3e00;
+}
+
+.question-bank-card__explanation {
+  margin: 12px 0 0;
+  padding: 10px 12px;
+  border-left: 3px solid var(--gold);
+  border-radius: 0 8px 8px 0;
+  background: #fff7e2;
+  color: #65451b;
+  font-size: 0.92rem;
+  line-height: 1.55;
 }
 
 /* ── COVER ── */

@@ -2096,6 +2096,7 @@
             </p>
 
             <div class="quiz-mode-group">
+              <p class="quiz-mode-section-title">Quiz ôn tập</p>
               <label class="quiz-mode-item">
                 <input type="radio" name="quiz-mode" value="random25" checked />
                 T&#7841;o b&#224;i ki&#7875;m tra ng&#7851;u nhi&#234;n (25 c&#226;u)
@@ -2115,6 +2116,15 @@
               <label class="quiz-mode-item">
                 <input type="radio" name="quiz-mode" value="quiz3" />
                 &#212;n t&#7853;p Quiz 3 (&#273;&#7873; d&#7921; &#273;o&#225;n)
+              </label>
+              <p class="quiz-mode-section-title">Quiz ôn tập FE (Final Exam)</p>
+              <label class="quiz-mode-item">
+                <input type="radio" name="quiz-mode" value="finalExamRandom60" />
+                T&#7841;o b&#224;i ki&#7875;m tra ng&#7851;u nhi&#234;n (60 c&#226;u)
+              </label>
+              <label class="quiz-mode-item">
+                <input type="radio" name="quiz-mode" value="finalExamAll" />
+                &#212;n t&#7853;p to&#224;n b&#7897; c&#226;u h&#7887;i (theo th&#7913; t&#7921;)
               </label>
             </div>
 
@@ -2195,6 +2205,14 @@
                 />
                 &#272;&#7873; d&#7921; &#273;o&#225;n
               </label>
+              <label class="question-bank-mode-item">
+                <input
+                  type="radio"
+                  name="question-bank-mode"
+                  value="finalExam"
+                />
+                Ng&#226;n h&#224;ng c&#226;u h&#7887;i FE
+              </label>
             </div>
 
             <label class="question-bank-search-wrap" for="question-bank-search">
@@ -2244,6 +2262,7 @@
 
     <script src="data/quiz-data.js"></script>
     <script src="data/quiz-data1.js"></script>
+    <script src="data/quiz-fe-data.js"></script>
     <script src="assets/js/script.js"></script>
   </body>
 </html>
